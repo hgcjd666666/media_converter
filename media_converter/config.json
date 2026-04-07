@@ -1,0 +1,125 @@
+{
+	"tasks": [
+		{
+			"name": "yp",
+			"config": {
+				"type": "composite",
+				"source_dir": "1a/音频",
+				"target_dir": "R:/Temp/音频_cut",
+				"source_exts": [
+					".flac",
+					".mp3",
+					".m4a",
+					".ogg"
+				],
+				"max_workers": 16,
+				"interval": 30,
+				"cleanup_ignore_dirs": [
+					".verysync"
+				],
+				"steps": [
+					{
+						"type": "metadata_clean"
+					},
+					{
+						"type": "cut_silence",
+						"threshold": "-70dB",
+						"min_duration": 1
+					}
+				]
+			}
+		},
+		{
+			"name": "music_full",
+			"config": {
+				"type": "composite",
+				"source_dir": "KuwoMusic/MyMusic",
+				"target_dir": "R:/MyMusic",
+				"source_exts": [
+					".flac",
+					".mp3",
+					".m4a",
+					".ogg"
+				],
+				"max_workers": 16,
+				"interval": 30,
+				"cleanup_ignore_dirs": [
+					".verysync"
+				],
+				"steps": [
+					{
+						"type": "cut_silence",
+						"threshold": "-70dB",
+						"min_duration": 0.1
+					},
+					{
+						"type": "convert",
+						"ffmpeg_args": [
+							"-af",
+							"compand=attacks=0.1:decays=0.8:points=-80/-15|-15/-10|-5/-5|0/0|20/20",
+							"-c:a",
+							"aac",
+							"-vbr",
+							"4",
+							"-c:v",
+							"copy",
+							"-disposition:v",
+							"attached_pic",
+							"-movflags",
+							"+faststart"
+						],
+						"target_ext": ".m4a"
+					}
+				]
+			}
+		},
+		{
+			"name": "video",
+			"config": {
+				"type": "convert",
+				"source_dir": "1a/荤-视频",
+				"target_dir": "荤-视频_h265",
+				"ffmpeg_args": [
+					"-c:v",
+					"libx265",
+					"-crf",
+					"35",
+					"-c:a",
+					"copy",
+					"-preset",
+					"veryslow"
+				],
+				"target_ext": ".mp4",
+				"source_exts": [
+					".mp4"
+				],
+				"max_workers": 1,
+				"interval": 30
+			}
+		},
+		{
+			"name": "video_B",
+			"config": {
+				"type": "convert",
+				"source_dir": "1a/AS-Q",
+				"target_dir": "1a/AS-Q_h256",
+				"ffmpeg_args": [
+					"-c:v",
+					"libx265",
+					"-crf",
+					"35",
+					"-c:a",
+					"copy",
+					"-preset",
+					"veryslow"
+				],
+				"target_ext": ".mp4",
+				"source_exts": [
+					".mp4"
+				],
+				"max_workers": 1,
+				"interval": 30
+			}
+		}
+	]
+}
