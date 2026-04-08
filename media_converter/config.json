@@ -77,8 +77,8 @@
 			"name": "video",
 			"config": {
 				"type": "convert",
-				"source_dir": "1a/荤-视频",
-				"target_dir": "荤-视频_h265",
+				"source_dir": "1a/视频",
+				"target_dir": "视频_h265",
 				"ffmpeg_args": [
 					"-c:v",
 					"libx265",
@@ -98,11 +98,11 @@
 			}
 		},
 		{
-			"name": "video_B",
+			"name": "video_Q",
 			"config": {
 				"type": "convert",
-				"source_dir": "1a/AS-Q",
-				"target_dir": "1a/AS-Q_h256",
+				"source_dir": "1a/Q",
+				"target_dir": "1a/Q_h256",
 				"ffmpeg_args": [
 					"-c:v",
 					"libx265",

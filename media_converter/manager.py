@@ -63,16 +63,16 @@ class ConversionTaskManager:
         task_temp_dir = os.path.join(self.base_temp_dir, task_name)
         Path(task_temp_dir).mkdir(parents=True, exist_ok=True)
 
-        # 根据类型实例化处理器
+        # 根据类型实例化处理器，传入 cache_dir
         if task_type == 'convert':
-            processor = ConvertProcessor(task_name)
+            processor = ConvertProcessor(task_name, cache_dir=task_temp_dir)
         elif task_type == 'cut_silence':
-            processor = CutSilenceProcessor(task_name)
+            processor = CutSilenceProcessor(task_name, cache_dir=task_temp_dir)
         elif task_type == 'metadata_clean':
-            processor = CleanMetadataProcessor(task_name)
+            processor = CleanMetadataProcessor(task_name, cache_dir=task_temp_dir)
         elif task_type == 'composite':
-            steps = config.get('steps', [])
-            processor = CompositeProcessor(task_name, steps)
+            # 复合任务不需要 cache_dir（它自己管理缓存）
+            processor = CompositeProcessor(task_name, config.get('steps', []))
         else:
             raise ValueError(f"不支持的任务类型: {task_type}")
 
@@ -166,7 +166,7 @@ class ConversionTaskManager:
             else:
                 raise ValueError(f"未知的任务类型: {task['type']}")
 
-            # 统一清理多余文件（仅当提供了 source_exts 且不是复合任务时，复合任务内部可能已处理）
+            # 统一清理多余文件（仅当提供了 source_exts 且不是复合任务时）
             if task['source_exts'] and task['type'] != 'composite':
                 target_ext = cfg.get('target_ext', '')
                 processor._cleanup_extra_files(

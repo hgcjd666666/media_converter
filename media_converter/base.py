@@ -6,16 +6,29 @@ import time
 import hashlib
 import tempfile
 import subprocess
+import json
 from pathlib import Path
-from typing import Set, Optional, Tuple, List, Dict
+from typing import Set, Optional, Tuple, List, Dict, Any
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 class BaseProcessor:
-    def __init__(self, task_name: str, logger_name: str = None):
+    def __init__(self, task_name: str, logger_name: str = None, cache_dir: str = None):
         self.task_name = task_name
         self.logger = self._setup_logger(logger_name or task_name)
         self._md5_cache: Dict[Tuple[str, int, int], str] = {}
+        # 持久化缓存：记录源文件 MD5 -> 是否已处理
+        self.cache_dir = cache_dir
+        self.processed_map = {}
+        if cache_dir:
+            Path(cache_dir).mkdir(parents=True, exist_ok=True)
+            cache_file = Path(cache_dir) / "processed.json"
+            if cache_file.exists():
+                try:
+                    with open(cache_file, 'r', encoding='utf-8') as f:
+                        self.processed_map = json.load(f)
+                except:
+                    self.processed_map = {}
 
     def _setup_logger(self, name: str) -> logging.Logger:
         logger = logging.getLogger(name)
@@ -44,36 +57,39 @@ class BaseProcessor:
             self.logger.error(f"计算 MD5 失败 {file_path}: {e}")
             return None
 
-    def _is_content_identical(self, src: str, dst: str) -> bool:
-        if not os.path.exists(dst):
+    def _is_source_unchanged(self, source_file: str, target_file: str) -> bool:
+        """检查源文件是否未修改（基于 MD5），且目标文件存在"""
+        if not os.path.exists(target_file):
             return False
-        try:
-            src_stat = os.stat(src)
-            dst_stat = os.stat(dst)
-            if src_stat.st_size != dst_stat.st_size:
-                return False
-            src_md5 = self._get_file_md5_with_cache(src)
-            dst_md5 = self._get_file_md5_with_cache(dst)
-            return src_md5 is not None and dst_md5 is not None and src_md5 == dst_md5
-        except Exception:
+        src_md5 = self._get_file_md5_with_cache(source_file)
+        if not src_md5:
             return False
+        # 从缓存中读取上次记录的 MD5
+        cached_md5 = self.processed_map.get(source_file)
+        if cached_md5 == src_md5:
+            return True
+        return False
+
+    def _mark_processed(self, source_file: str, target_file: str):
+        """标记源文件已处理，记录其 MD5"""
+        src_md5 = self._get_file_md5_with_cache(source_file)
+        if src_md5 and self.cache_dir:
+            self.processed_map[source_file] = src_md5
+            cache_file = Path(self.cache_dir) / "processed.json"
+            with open(cache_file, 'w', encoding='utf-8') as f:
+                json.dump(self.processed_map, f, indent=2, ensure_ascii=False)
 
     def _safe_move(self, src: str, dst: str):
         Path(os.path.dirname(dst)).mkdir(parents=True, exist_ok=True)
         shutil.move(src, dst)
 
     def _run_ffmpeg(self, input_file: str, output_file: str, ffmpeg_args: List[str]) -> Tuple[bool, str]:
-        """
-        执行 ffmpeg 命令，自动处理临时文件扩展名。
-        ffmpeg_args 是命令中 -i 之后、输出文件之前的参数列表。
-        返回 (成功标志, 错误信息)
-        """
         Path(os.path.dirname(output_file)).mkdir(parents=True, exist_ok=True)
         suffix = os.path.splitext(output_file)[1]
         fd, temp_file = tempfile.mkstemp(suffix=suffix, dir=os.path.dirname(output_file))
         os.close(fd)
         try:
-            cmd = ['ffmpeg', '-i', input_file] + ffmpeg_args + ['-y', temp_file]
+            cmd = ['ffmpeg', '-loglevel', 'error', '-i', input_file] + ffmpeg_args + ['-y', temp_file]
             result = subprocess.run(cmd, capture_output=True, text=True,
                                     encoding='utf-8', errors='ignore')
             if result.returncode != 0:
@@ -100,11 +116,16 @@ class BaseProcessor:
         self.logger.info(f"找到 {len(tasks)} 个文件需要处理")
         if not tasks:
             return
+
         def worker(args):
             src, tgt = args
-            if self._is_content_identical(src, tgt):
-                return f"跳过内容未变: {tgt}", "skipped"
-            return self.process_file(src, tgt, **kwargs)
+            if self._is_source_unchanged(src, tgt):
+                return f"源文件未修改，跳过: {src}", "skipped"
+            result_msg, result_type = self.process_file(src, tgt, **kwargs)
+            if result_type in ("converted", "cut", "cleaned", "copied"):
+                self._mark_processed(src, tgt)
+            return result_msg, result_type
+
         self._run_parallel(tasks, worker, kwargs.get('max_workers', 8), self.task_name)
 
     def _run_parallel(self, tasks, worker_func, max_workers, task_desc):
@@ -117,9 +138,9 @@ class BaseProcessor:
             for future in as_completed(futures):
                 try:
                     msg, typ = future.result()
-                    if typ in ("converted", "cut", "cleaned"):
+                    if typ in ("converted", "cut", "cleaned", "copied"):
                         completed += 1
-                    elif typ in ("skipped", "copied"):
+                    elif typ == "skipped":
                         skipped += 1
                     else:
                         errors += 1

@@ -1,4 +1,3 @@
-import os
 from typing import Tuple
 from .base import BaseProcessor
 from .utils import get_artist_metadata
@@ -9,11 +8,9 @@ class CleanMetadataProcessor(BaseProcessor):
         artist = get_artist_metadata(source_file, self.logger)
         ff_args = [
             '-map', '0:a',
-            '-map', '0:v?',
             '-c', 'copy',
             '-map_metadata', '-1',
-            '-map_metadata:s:a', '-1',
-            '-map_metadata:s:v', '-1'
+            '-map_metadata:s:a', '-1'
         ]
         if artist:
             ff_args.extend(['-metadata', f'artist={artist}'])
